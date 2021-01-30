@@ -11,6 +11,42 @@ import (
 	"unsafe"
 )
 
+// StreamDecoder lets you decode
+type StreamDecoder interface {
+	SetDictionary(dictionary []byte)
+	Decompress(in, out []byte) error
+	Close()
+}
+
+type streamDecoder struct {
+	p *C.LZ4_streamDecode_t
+}
+
+// SetDictionary sets the dictionary for the decoder to use.
+func (sd *streamDecoder) SetDictionary(dictionary []byte) {
+	C.LZ4_setStreamDecode(sd.p, p(dictionary), clen(dictionary))
+}
+
+// Decompress with a known output size on the given decoder.
+// len(out) should be equal to the length of the uncompressed out.
+func (sd *streamDecoder) Decompress(in, out []byte) error {
+	if int(C.LZ4_decompress_safe_continue(sd.p, p(in), p(out), clen(in), clen(out))) < 0 {
+		return errors.New("Malformed compression stream")
+	}
+
+	return nil
+}
+
+// Close the decoder stream.
+func (sd *streamDecoder) Close() {
+	C.LZ4_freeStreamDecode(sd.p)
+}
+
+// NewStreamDecoder creates a new LZ4 stream decoder.
+func NewStreamDecoder() StreamDecoder {
+	return &streamDecoder{C.LZ4_createStreamDecode()}
+}
+
 // p gets a char pointer to the first byte of a []byte slice
 func p(in []byte) *C.char {
 	if len(in) == 0 {
@@ -26,7 +62,7 @@ func clen(s []byte) C.int {
 
 // Uncompress with a known output size. len(out) should be equal to
 // the length of the uncompressed out.
-func Uncompress(in, out []byte) (error) {
+func Uncompress(in, out []byte) error {
 	if int(C.LZ4_decompress_safe(p(in), p(out), clen(in), clen(out))) < 0 {
 		return errors.New("Malformed compression stream")
 	}
